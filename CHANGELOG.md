@@ -38,7 +38,8 @@ On open-meridian 0.35.2, contract v29 (rulings 1003, 1004, 1005, 1009 to
   0.35.2 delivers the SDK's own settings beside the class's (each kind's
   window in `.values`), so the untyped declaration 0.35.1 needed is gone
   (`meridian plugin migrate --to 0.35.2`: `typed-settings-declared`); the
-  settings missing are read as `.missing`.
+  settings missing are read as `.missing`. A typed delivery gives a
+  table's rows as a tuple, which the Account currency setting is now read from too.
 - **The suite's v29 cases**: `records-a-derived-series` and
   `records-a-pools-factor` not presented, with why.
 - **`meridian plugin migrate --to 0.35.1`** (then `--to 0.35.2`, only the pins) moved the pins, rewrote the

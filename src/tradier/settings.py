@@ -246,7 +246,9 @@ def config_from(values: Mapping[str, object], unset: Collection[str] = ()) -> Co
     rows = values.get(ACCOUNT_CURRENCY)
     return Config(
         account_currency=tuple(
-            dict(row) for row in (rows if isinstance(rows, list) else []) if isinstance(row, dict)
+            dict(row)
+            for row in (rows if isinstance(rows, list | tuple) else [])
+            if isinstance(row, dict)
         ),
         credentials=Credentials(token) if token else None,
         token_set=bool(token),
