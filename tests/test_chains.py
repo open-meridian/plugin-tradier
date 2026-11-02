@@ -22,7 +22,7 @@ from tradier import chains, convert, synthetic
 from tradier.synthetic import exchange
 from tradier.vendor import Fetched
 
-from conftest import RECORDS, SPY, Clock, answer_records, at, hear_row, synthetic_lake, want
+from conftest import RECORDS, SPY, Clock, answer_records, at, synthetic_lake, want
 
 INSTANCE = "tradier-1"
 #: Saturday 2026-10-10, 09:00 New York: no session today.
@@ -62,7 +62,7 @@ def chain_want(
 
 def hear(recorder: Recorder, lake: Any, event: ops.ObservationsWantedEvent) -> None:
     recorder.answer("ObservationsWanted", lambda _: event)
-    asyncio.run(hear_row(recorder, "ObservationsWanted", lake.on_observations_wanted))
+    asyncio.run(recorder.hear(lake, "ObservationsWanted"))
 
 
 def rows(recorder: Recorder, name: str, field: str) -> list[Any]:
@@ -279,7 +279,7 @@ def test_a_standing_chain_is_kept_current_and_only_changes_sent(tmp_path: Path) 
         "WantWithdrawn",
         lambda _: [ops.WantWithdrawnEvent(want_id="WNT-1", dataset=f"{INSTANCE}:options")],
     )
-    asyncio.run(hear_row(recorder, "WantWithdrawn", lake.on_want_withdrawn))
+    asyncio.run(recorder.hear(lake, "WantWithdrawn"))
     clock.now += 120 * 10**9
     asyncio.run(lake.tick())
     assert lake.chains.read_count == 4 and lake.chains.underlyings == {}

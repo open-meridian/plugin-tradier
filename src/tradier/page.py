@@ -194,7 +194,7 @@ def connection_read(state: State) -> ConnectionRead:
         sessions=(
             None
             if config.on_sandbox
-            else (1 if stream is not None and stream.state == "streaming" else 0)
+            else (1 if stream is not None and stream.state == "Open" else 0)
         ),
         environment=config.environment,
         host=host(state),
@@ -207,17 +207,13 @@ def connection_read(state: State) -> ConnectionRead:
     )
 
 
-#: The supervisor's states in the page's words (SDK 0.35's
-#: `helpers.sessions.SessionState`): nothing wanted is idle, a session open
-#: is streaming; connecting, waiting, refused and no key as they are.
-SHOWN_STATES = {"off": "idle", "open": "streaming"}
-
-
 def session_read(state: State) -> SessionRead:
     assert state.streamer is not None
     held = state.streamer.state
     return SessionRead(
-        state=SHOWN_STATES.get(held.state, held.state),
+        # The SDK's words for a supervised session (0.35.3, ruling 1044):
+        # Off, No key, Connecting, Open, Waiting or Refused.
+        state=held.label,
         subscribed=len(held.subscribed),
         opened=held.opened,
         reconnects=held.reconnects,
@@ -417,14 +413,12 @@ def figures(state: State) -> list[meridian.Figure]:
     stream = read.stream
     if read.sessions is None:
         streaming: Any = "Does not stream"
-    elif stream is None or stream.state in ("idle", ""):
+    elif stream is None or stream.state in ("Off", ""):
         streaming = "Off"
-    elif stream.state == "streaming":
+    elif stream.state == "Open":
         streaming = f"{stream.subscribed} listings"
     else:
-        streaming = meridian.Figure(
-            "", stream.state.capitalize(), state="warn", why=stream.last_error[:200]
-        )
+        streaming = meridian.Figure("", stream.state, state="warn", why=stream.last_error[:200])
     last = max((s.last_recorded for s in served), default="")
     used = state.tradier.usage if state.tradier is not None else Usage()
     now = state.tradier.clock_ns() if state.tradier is not None else 0

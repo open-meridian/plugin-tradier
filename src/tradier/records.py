@@ -24,10 +24,11 @@ class FeedRead:
 
 @dataclass(frozen=True)
 class SessionRead:
-    """The stream: its state (idle, connecting, streaming, waiting, refused,
-    no key), the listings it streams, the sessions opened and reopened (each
-    reopening a gap Tradier's history cannot fill), the messages heard, and
-    the last message and error. Never a token or a session's ID."""
+    """The stream: its state in the SDK's words (`SessionState.label`: Off, No
+    key, Connecting, Open, Waiting or Refused), the listings it streams,
+    the sessions opened and reopened (each reopening a gap Tradier's
+    history cannot fill), the messages heard, and the last message and
+    error. Never a token or a session's ID."""
 
     state: str
     subscribed: int = 0

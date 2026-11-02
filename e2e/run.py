@@ -318,7 +318,7 @@ def run():
     must(connection["mode"] == "Sample data" and connection["environment"] == "sandbox"
          and [c["label"] for c in connection["credentials"]] == ["Sandbox access token"],
          f"step 7, read_connection: {connection}")
-    must(connection["sessions"] == 1 and connection["stream"]["state"] == "streaming",
+    must(connection["sessions"] == 1 and connection["stream"]["state"] == "Open",
          f"step 7, the stream's session: {connection['stream']}")
     datasets = call("tradier__read_datasets", {}, "unchanged")["data"]
     by_key = {d["key"]: d for d in datasets["served"]}
