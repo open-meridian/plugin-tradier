@@ -27,6 +27,7 @@ from conftest import (
     Clock,
     answer_records,
     at,
+    hear_row,
     synthetic_lake,
     want,
 )
@@ -115,7 +116,7 @@ async def test_a_listing_from_another_source_is_joined_spelled_once_and_kept(
         ("symbol", "BRK.B", "snaptrade"),
     ]
     assert lake.products.symbols[BRK] == "BRK.B"
-    again = Lake(recorder, lake.source, Products(tmp_path / "products.json"), lake.clock_ns)
+    again = recorder.bind(Lake(lake.source, Products(tmp_path / "products.json"), lake.clock_ns))
     assert again.products.symbols == {BRK: "BRK.B"}
     await again.daily([BRK], D8, D8)
     assert len(on(recorder, "ResolveInstrument")) == 1  # read back from storage
@@ -128,8 +129,8 @@ async def test_a_subject_with_no_symbol_is_declined_and_a_day_without_a_session_
     holder = Recorder("tradier-1")
     holder.answer("ObservationsWanted", lambda _: want(ISIN_ONLY, SPY, business_date="2026-10-04"))
     answer_records(holder, RECORDS)
-    lake.plugin = holder
-    await holder.receive(observations_wanted=lake.on_want)
+    holder.bind(lake)
+    await hear_row(holder, "ObservationsWanted", lake.on_observations_wanted)
     declined = {(s.entity_id, d.reason) for d in on(holder, "DeclineWant") for s in d.subjects}
     assert declined == {
         (ISIN_ONLY, ops.UNANSWERED_REASON_NOT_COVERED),
@@ -145,7 +146,7 @@ async def test_a_want_for_a_kind_or_length_it_does_not_serve_is_declined(tmp_pat
         want(SPY, data_type="meridian.v1.Bar", interval_ns=60 * 10**9),
     ):
         recorder.answer("ObservationsWanted", _given(event))
-        await recorder.receive(observations_wanted=lake.on_want)
+        await hear_row(recorder, "ObservationsWanted", lake.on_observations_wanted)
     assert len(on(recorder, "DeclineWant")) == 2
     assert all(d.reason == ops.UNANSWERED_REASON_NOT_COVERED for d in on(recorder, "DeclineWant"))
 
@@ -158,7 +159,7 @@ async def test_a_standing_live_want_is_kept_current_until_withdrawn(tmp_path: Pa
     recorder, lake, clock = made(tmp_path)
     live = want(SPY, BRK, dataset="tradier-1:live", standing=True, want_id="WNT-L")
     recorder.answer("ObservationsWanted", lambda _: live)
-    await recorder.receive(observations_wanted=lake.on_want)
+    await hear_row(recorder, "ObservationsWanted", lake.on_observations_wanted)
     first = prices(recorder)
     kinds = sorted(ops.PriceKind.Name(p.kind) for p in first)
     # SPY's last, bid and ask; BRK.B's last and ask, its bid side empty.
@@ -171,7 +172,7 @@ async def test_a_standing_live_want_is_kept_current_until_withdrawn(tmp_path: Pa
     await lake.tick()
     assert len(prices(recorder)) == 2 * len(first)
     recorder.answer("WantWithdrawn", lambda _: [ops.WantWithdrawnEvent(want_id="WNT-L")])
-    await recorder.receive(want_withdrawn=lake.on_withdrawn)
+    await hear_row(recorder, "WantWithdrawn", lake.on_want_withdrawn)
     clock.now += 3600 * 10**9
     await lake.tick()
     assert len(prices(recorder)) == 2 * len(first)
@@ -204,7 +205,7 @@ async def test_a_live_price_names_its_venue_and_one_not_held_is_kept_as_reported
     ]
     held = Recorder("tradier-1")
     answer_records(held, RECORDS)
-    lake.plugin = held
+    held.bind(lake)
     clock.now += 3601 * 10**9
     await lake.live([SPY])
     named = {ops.PriceKind.Name(p.kind): p.meta.source.venue_id for p in prices(held)}
@@ -280,7 +281,7 @@ async def test_a_source_that_fails_is_said_and_its_subjects_silent(tmp_path: Pat
 
     lake.source = Failing()
     recorder.answer("ObservationsWanted", lambda _: want(SPY, business_date="2026-10-08"))
-    await recorder.receive(observations_wanted=lake.on_want)
+    await hear_row(recorder, "ObservationsWanted", lake.on_observations_wanted)
     (declined,) = on(recorder, "DeclineWant")
     assert declined.reason == ops.UNANSWERED_REASON_SOURCE_SILENT
     assert "no route to host" in lake.last_error
@@ -296,7 +297,7 @@ async def test_a_book_instrument_known_only_by_another_sources_identifiers_is_pr
     # own symbol to the record (W3.1) and records the close against the want.
     recorder, lake, _ = made(tmp_path)
     recorder.answer("ObservationsWanted", lambda _: want(TQQQ, business_date="2026-10-08"))
-    await recorder.receive(observations_wanted=lake.on_want)
+    await hear_row(recorder, "ObservationsWanted", lake.on_observations_wanted)
     (read,) = on(recorder, "ResolveInstrument")
     assert read.instrument_id == TQQQ and read.as_of_ns > 0
     (joined,) = on(recorder, "ResolveIdentifier")
@@ -332,7 +333,7 @@ async def test_with_no_read_of_an_instrument_its_own_listings_alone_are_served(
     await lake.daily([BRK, TQQQ], D8, D8)
     assert not prices(recorder) and not lake.reads_instruments
     assert len(on(recorder, "ResolveInstrument")) == 1  # asked once, not per subject
-    await lake.seed(["BRK.B"])
+    await lake.seed_symbols(["BRK.B"])
     (minted,) = [e for e, s in lake.products.symbols.items() if s == "BRK.B"]
     await lake.daily([minted], D8, D8)
     assert [p.meta.row_key for p in prices(recorder)] == [f"BRK.B:1d:2026-10-08@{minted}"]
@@ -344,7 +345,7 @@ async def test_a_listing_that_does_not_resolve_is_reported_and_not_kept(tmp_path
         "ResolveIdentifier",
         lambda _: ops.ResolveIdentifierResult(found=False, miss_reason=ops.MISS_REASON_AMBIGUOUS),
     )
-    await lake.seed(["TQQQ"])
+    await lake.seed_symbols(["TQQQ"])
     (missed,) = on(recorder, "ReportMissingInstrument")
     assert missed.reason == ops.MISS_REASON_AMBIGUOUS and missed.source == "tradier"
     assert lake.products.symbols == {}
@@ -360,13 +361,13 @@ async def test_the_sandboxs_live_data_is_recorded_as_live_delayed(tmp_path: Path
     lake.use_delayed(True)
     delayed = want(SPY, dataset="tradier-1:live_delayed", standing=True, want_id="WNT-D")
     recorder.answer("ObservationsWanted", lambda _: delayed)
-    await recorder.receive(observations_wanted=lake.on_want)
+    await hear_row(recorder, "ObservationsWanted", lake.on_observations_wanted)
     rows = prices(recorder)
     assert rows and {p.meta.source.dataset for p in rows} == {"tradier-1:live_delayed"}
     assert "WNT-D" in lake.standing
     real_time = want(SPY, dataset="tradier-1:live", want_id="WNT-R")
     recorder.answer("ObservationsWanted", lambda _: real_time)
-    await recorder.receive(observations_wanted=lake.on_want)
+    await hear_row(recorder, "ObservationsWanted", lake.on_observations_wanted)
     (declined,) = on(recorder, "DeclineWant")
     assert declined.want_id == "WNT-R"
     assert declined.reason == ops.UNANSWERED_REASON_NOT_COVERED

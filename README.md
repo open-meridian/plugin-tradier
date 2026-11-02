@@ -22,7 +22,12 @@ It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
 pass the same suites of the SDK, unchanged.
 
-**Status:** 0.13.2, on open-meridian 0.33.1 (contract 28): option chains
+**Status:** 0.14.0, on open-meridian 0.35.1 (contract 29): one class for
+each role it holds -- the data role's `Market` (the SDK's listings feed
+and its option chains), custody's `Custodian`, connectivity's `Trading`
+(the SDK's `Trader`) -- registered with `meridian.run`, and its stream kept
+open by the SDK's supervisor (`helpers.sessions`, ruling 1027). From
+contract 28: option chains
 in two datasets of their own, `options` and `options_delayed` (ruling 660),
 an underlying's series, quotes, open interest and volume under its record,
 keyed by OCC symbol and never minted; each live row's feed delay recorded
@@ -33,7 +38,7 @@ template copied between plugins (rulings 202 and 457); the placement types
 it takes declared (DMA alone: Tradier takes no request for quote). Its
 connectivity work is the SDK's (`meridian.roles.connectivity`), its
 listings in the lake too (`meridian.roles.data.listings`), its chains on
-the SDK's helpers (`meridian.roles.chains`); the environment its session
+the SDK's helpers (`meridian.helpers.chains`); the environment its session
 reached on its venue catalogue, the agents' demo-only guard's second key;
 its whole declaration, and its documentation in [docs/](docs/), which a
 deployment shows on its Documentation tab; the daily dataset names the US
@@ -96,7 +101,8 @@ SDK, CLI 0.1.52 and core v28 (8def82a), by tag and digest.
   here by its sequence number; one naming no print recorded here is counted
   and not sent.
 - **Reconnect.** A stream that breaks is opened again with a new session, a
-  second later and then doubling to a minute, and subscribed again from
+  second later and then doubling to a minute, each wait jittered (the SDK's
+  supervisor, from 0.14.0), and subscribed again from
   what is wanted. The gap between two sessions is not filled: Tradier's
   time and sales history names no print by its sequence number, so reading
   it again would record trades twice. Each reconnect is counted on the

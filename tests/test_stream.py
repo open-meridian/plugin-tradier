@@ -279,12 +279,14 @@ async def test_a_broken_stream_is_opened_again_with_a_new_session_and_subscribed
     async def no_sleep(_: float) -> None:
         pass
 
+    # The SDK's supervisor (0.35): each session held once.
     streamer = Streamer(lambda: feed, on_heard, flush, sleep=no_sleep)
     streamer.want(["SPY"])
-    await asyncio.wait_for(streamer.run(sessions=2), 5)
+    await asyncio.wait_for(streamer.run(once=True), 5)
+    await asyncio.wait_for(streamer.run(once=True), 5)
     assert feed.opened == 2 and feed.subscribed == [["SPY"], ["SPY"]]
     assert [t.sequence for t in heard] == [1, 2, 3]
-    session = streamer.session
+    session = streamer.state
     assert session.reconnects == 2 and "broke" in session.last_error
 
 
@@ -301,10 +303,10 @@ async def test_with_nothing_wanted_nothing_is_opened() -> None:
     streamer = Streamer(make, nothing, nothing)
     task = asyncio.create_task(streamer.run())
     await asyncio.sleep(0.05)
-    assert not opened and streamer.session.state == "idle"
+    assert not opened and streamer.state.state == "off"
     streamer.want(["SPY"])
     await asyncio.sleep(0.05)
-    assert opened and streamer.session.state == "no key"
+    assert opened and streamer.state.state == "no key"
     task.cancel()
     with contextlib.suppress(asyncio.CancelledError):
         await task

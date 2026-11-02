@@ -15,7 +15,7 @@ of the other is declined, not covered (0.13.1: DeclineWant takes no
 **Never minted, never resolved** (ruling 561, W10.4): every row names the
 underlying's record as its subject and the series by its OCC OSI symbol
 (`occ_osi`, W1.26) as its series key, through the SDK's helpers
-(`meridian.roles.chains`): each series' terms as the platform's
+(`meridian.helpers.chains`): each series' terms as the platform's
 listed-option template's fields (`TPL-listed-option`, version 1; ruling
 617), its best bid and offer as a quote, its open interest and volume as
 statistics. A series gets an `INS-` record only when a reader asks for one
@@ -69,15 +69,16 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-from collections import OrderedDict, deque
+from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
 from meridian.errors import MeridianError
+from meridian.helpers import chains as helpers
 from meridian.operations import Money, Quote, SourceTime
 from meridian.plugin.v1 import operations_pb2 as ops
-from meridian.roles import chains as helpers
+from meridian.roles.data import SentRows
 from meridian.roles.data.listings import Counts
 
 from .convert import NEW_YORK, ChainOption, new_york_date
@@ -150,7 +151,7 @@ class Chains:
         #: When each chain call of the last minute was made.
         self.calls: deque[int] = deque()
         #: Each row's last sending, by (data type, dataset, row key).
-        self.sent: OrderedDict[tuple[str, str, str], str] = OrderedDict()
+        self.sent = SentRows(REMEMBERED)
         #: Chains read since start, and the series in the last.
         self.read_count = 0
         #: When a chain was last read from Tradier, and the liveness last
@@ -325,7 +326,7 @@ class Chains:
             return False
         self.liveness_ns = self.alive_ns
         try:
-            await self.lake.plugin.record_liveness(
+            await self.lake.record_liveness(
                 liveness=[
                     ops.DatasetLiveness(
                         dataset=self.dataset(), venue_id="", alive_at_ns=self.alive_ns
@@ -391,19 +392,6 @@ class Chains:
             out["volume"] = today.isoformat()
         return out
 
-    # ── Recording (W10.4) ────────────────────────────────────────────────
-
-    def _changed(self, data_type: str, dataset: str, row_key: str, said: str) -> bool:
-        """Whether a row says something other than its last sending."""
-        mark = (data_type, dataset, row_key)
-        if self.sent.get(mark) == said:
-            return False
-        self.sent[mark] = said
-        self.sent.move_to_end(mark)
-        while len(self.sent) > REMEMBERED:
-            self.sent.popitem(last=False)
-        return True
-
     async def record(self, held: Underlying, listed: Sequence[ChainOption], want_id: str) -> None:
         """A chain's series, quotes and statistics, each sent only where it
         changed: its series' terms, its quotes judged at the edge."""
@@ -438,7 +426,7 @@ class Chains:
                 self.counts.unconverted += 1
                 continue
             terms = repr([(f.path, f.value) for f in row.fields])
-            if self._changed(SERIES, dataset, option.osi, terms):
+            if self.sent.changed(SERIES, dataset, option.osi, terms):
                 series.append(row)
             quote = self.quote(held.subject, option, key, dataset, raw)
             if quote is not None:
@@ -446,7 +434,7 @@ class Chains:
                 # Its prices and sizes, never Tradier's quote time alone
                 # (ruling 770): unchanged, it is not recorded again.
                 said = repr((quote.bid, quote.ask, quote.bid_quantity, quote.ask_quantity))
-                if self._changed(QUOTE, dataset, option.osi, said):
+                if self.sent.changed(QUOTE, dataset, option.osi, said):
                     quotes.append(quote)
             for kind, value in (("open_interest", option.open_interest), ("volume", option.volume)):
                 day = dates.get(kind)
@@ -456,7 +444,7 @@ class Chains:
                     held.subject, key, kind, value, day, dataset=dataset, valid_from_ns=now, raw=raw
                 )
                 assert stat.meta is not None
-                if self._changed(STATISTIC, dataset, stat.meta.row_key, str(value)):
+                if self.sent.changed(STATISTIC, dataset, stat.meta.row_key, str(value)):
                     statistics.append(stat)
         if series:
             await self.send("series", series, want_id)
@@ -490,7 +478,7 @@ class Chains:
 
     async def send(self, kind: str, rows: Sequence[Any], want_id: str) -> None:
         """Rows in the lake's batches, against the want, counted."""
-        call = getattr(self.lake.plugin, f"record_{kind}")
+        call = getattr(self.lake, f"record_{kind}")
         counts = self.counts
         for start in range(0, len(rows), BATCH):
             done = await call(**{kind: list(rows[start : start + BATCH])}, want_id=want_id)
