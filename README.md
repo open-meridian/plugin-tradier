@@ -22,7 +22,7 @@ It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
 pass the same suites of the SDK, unchanged.
 
-**Status:** 0.14.0, on open-meridian 0.35.1 (contract 29): one class for
+**Status:** 0.14.0, on open-meridian 0.35.2 (contract 29): one class for
 each role it holds -- the data role's `Market` (the SDK's listings feed
 and its option chains), custody's `Custodian`, connectivity's `Trading`
 (the SDK's `Trader`) -- registered with `meridian.run`, and its stream kept

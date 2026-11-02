@@ -222,7 +222,7 @@ class Process:
         chosen (or, with sample data, the built-in exchange), the account's
         client too, what is streamed asked again, and the kinds tended."""
         state, market = self.state, self.state.lake
-        state.config = config_from(delivered.values, delivered.missing_required)
+        state.config = config_from(delivered.values, delivered.missing)
         state.values = dict(delivered.values)
         if self.account.use(state.config):
             self.woken.set()
