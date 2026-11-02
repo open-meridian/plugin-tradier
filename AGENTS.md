@@ -37,18 +37,30 @@ as for every plugin.
 - `src/tradier/chains.py` (from 0.13.0; contract v28, ruling 660): option
   chains in `options` and `options_delayed`, one per timeliness, apart from
   the equity datasets. An underlying's series, quotes and statistics through
-  the SDK's `meridian.roles.chains` helpers, under the underlying and keyed
+  the SDK's `meridian.helpers.chains` helpers, under the underlying and keyed
   by OCC OSI symbol: never resolve, mint or request a series' record (561;
   RequestSeriesRecords is a reader's). Every expiration Tradier lists is
   read for a want (a want names no expiration), a standing want kept
   current at most once a minute within `CALLS_PER_MINUTE`. Greeks are never
   read (the engine computes its own), nor OCC's files (150).
-- **The edge, for now** (`Lake.at_the_edge`, 0.13.0): the feed delay and
-  the SDK's quality checks over live rows, temporary until the SDK's
-  listings feed takes them over (queued as SDK 0.33.2); remove it then.
+- **The edge** (0.13.0): the feed delay and the SDK's quality checks over
+  live rows, the SDK's listings feed's work from open-meridian 0.35
+  (`listings.at_the_edge`); `Lake.at_the_edge` tells it only a chain's
+  standing wants and the delayed live kind.
+- `src/tradier/__main__.py`: one class per role it may hold (open-meridian
+  0.35) -- `Market` (data: the stream, the timetable with the chains, the
+  licences), `Custodian` (custody: each account read every Read every) and
+  `Trading` (connectivity: the SDK's `Trader`) -- registered with
+  `meridian.run`, which registers those the instance holds, applies the
+  settings (`Process.on_settings`), serves the pages, sets the figures and
+  restarts a class's `run` after a backoff should it fail. What no one role
+  owns (the latency reported, the health said, the account scope followed,
+  the kinds tended) is `Process`'s, run by the first class started of
+  those it concerns.
 - `src/tradier/stream.py`, `ws.py` and `conditions.py`: Tradier's stream over
-  WebSocket (a session made by REST; the standard library's client), its
-  reconnect, and what of a time and sale converts to the platform's trade
+  WebSocket (a session made by REST; the standard library's client), kept
+  open by the SDK's supervisor (`Streamer`, a `helpers.sessions.Supervisor`),
+  and what of a time and sale converts to the platform's trade
   attributes (the session; a flag is kept as reported). What is streamed
   is what the standing wants ask (lake.py), never kept here.
 - `src/tradier/page.py` and `records.py`: the data role's Connection and
@@ -222,7 +234,7 @@ and subscribe to comes from the roles `pyproject.toml` declares under
   keeps every one, so operations tells "needs sign-in" apart from merely old.
   An activity recorded before its instrument resolved -- a plan's own code
   linked later, a symbol the security master completes later -- is
-  re-resolved, never sent again: `plugin.re_resolve_activity(
+  re-resolved, never sent again: `self.re_resolve_activity(
   external_account_id=..., source=..., external_activity_id=...,
   instrument_id=..., provenance=meridian.Provenance(...),
   resolved_at_ns=...)`, the provenance saying what resolved it (the link and

@@ -24,8 +24,8 @@ ROLES = ("data", "custody", "connectivity")
 
 def client(linked: bool = True, **caller: object) -> PageClient:
     recorder = Recorder("tradier")
-    syncer = Syncer(
-        recorder, lambda: None, paper=lambda: False, stale_after=lambda: timedelta(hours=36)
+    syncer = recorder.bind(
+        Syncer(lambda: None, paper=lambda: False, stale_after=lambda: timedelta(hours=36))
     )
     syncer.profiles[NUMBER] = {"account_number": NUMBER, "type": "margin"}
     shown = syncer.status.accounts[NUMBER] = AccountStatus(

@@ -1,5 +1,59 @@
 # Changelog
 
+## 0.14.0
+
+On open-meridian 0.35.2, contract v29 (rulings 1003, 1004, 1005, 1009 to
+1029), on core v29's harness.
+
+- **One class for each role** (open-meridian 0.35: each role is one class).
+  `Market` (data: the SDK's listings feed with Tradier's option chains, its
+  stream, timetable and licences in `run`), `Custodian` (custody: `Syncer`,
+  a `custody.Role`, its acts made through itself; the custody pages' acts
+  through it) and `Trading` (connectivity: the SDK's `Trader`, its orders
+  polled at its own `poll_seconds`), registered with `meridian.run`, which
+  registers those the instance holds, applies the first settings before
+  anything is heard, serves the pages, sets the figures on each heartbeat
+  and starts each class's `run` again after a backoff should it fail. The
+  plugin's own restart loop (`again`), its tasks and its hand-wired hearing
+  are gone. What no one role owns -- the latency reported, the health said
+  (now each minute too), the account scope followed, the kinds tended -- is
+  run by the first class started of those it concerns.
+- **The stream kept open by the SDK** (ruling 1027): `Streamer` is the SDK's
+  `helpers.sessions.Supervisor` over the plugin's own Tradier feed, its
+  reconnect loop gone: a break reopened with a new session after a wait
+  doubling from a second to a minute, jittered; a refused token waited out
+  five minutes. The Connection page's Stream reads the supervisor's state
+  in its own words.
+- **The edge** (contract v28): open-meridian 0.35's listings feed ages and
+  judges live rows itself (`listings.at_the_edge`); `Lake.at_the_edge` now
+  only tells it that a chain's standing want stands and that the live kind
+  is recorded into `live_delayed` on the sandbox. The chains' acts are made
+  through the feed (`record_liveness`, `record_<kind>`), no longer the
+  connection.
+- **Fixes migrate left:** `Lake.named` read the SDK's `dataset`, which in
+  0.35 reads `named` (a recursion), now the SDK's `named`; the feed's own
+  handlers call the SDK's renamed ones (`on_observations_wanted`,
+  `on_want_withdrawn`); the imports `__all__` names, restored.
+- **Its settings typed** (`@meridian.settings`, the SDK's form): open-meridian
+  0.35.2 delivers the SDK's own settings beside the class's (each kind's
+  window in `.values`), so the untyped declaration 0.35.1 needed is gone
+  (`meridian plugin migrate --to 0.35.2`: `typed-settings-declared`); the
+  settings missing are read as `.missing`. A typed delivery gives a
+  table's rows as a tuple, which the Account currency setting is now read from too.
+- **The suite's v29 cases**: `records-a-derived-series` and
+  `records-a-pools-factor` not presented, with why.
+- **`meridian plugin migrate --to 0.35.1`** (then `--to 0.35.2`, only the pins) moved the pins, rewrote the
+  feed's and the Trader's construction and handler names, the chains'
+  sent-rows memory as the SDK's `SentRows`, `meridian.helpers.chains`, and
+  dropped the plugin's own edge. By hand: the entry point, `Syncer` and the
+  custody pages' role, the stream supervisor, the tests' hearing
+  (`hear_row`) and binding, `seed` as `seed_symbols`, and the e2e's reader
+  and desk as role classes on `meridian.run_async`.
+- **The pins:** open-meridian 0.35.2 and plugin-python:0.35.2 by tag and
+  digest (`sha256:2e2dd7ad...c988bea28`); core's runtime and harness
+  `1ae36f0` (merged as 3f99222, chart 0.1.339) by digest; meridian 0.1.57
+  in check.yaml.
+
 ## 0.13.3
 
 SDK 0.33.4: raw-record writes and enum conversion fixes (ruling 937).

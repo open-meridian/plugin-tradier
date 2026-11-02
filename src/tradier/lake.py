@@ -29,13 +29,12 @@ the other timeliness `not_entitled`, which the lake refused every time.
 and statistics recorded into whichever the environment provides, as the
 live kind is; kept current by the timetable (`tick`).
 
-**The edge, done here for now** (from 0.13.0; contract v28, rulings 424
-and 518): each live price, quote and trade recorded unasked or for a
-standing want has its feed delay recorded (`roles.Latency.aged`, the
-`edge` hop) and is judged by the SDK's quality checks
-(`quality.EdgeChecks`), as the SDK's `Wants.record` does for the other
-feeds. TEMPORARY: the SDK's listings feed records neither in 0.33.1; this
-glue goes when its listings feed takes them over (queued as SDK 0.33.2).
+**The edge** (from 0.13.0; contract v28, rulings 424 and 518): each live
+price, quote and trade recorded unasked or for a standing want has its
+feed delay recorded (`roles.Latency.aged`, the `edge` hop) and is judged by
+the SDK's quality checks (`quality.EdgeChecks`) -- the SDK's listings feed's
+work from open-meridian 0.35 (`listings.at_the_edge`), `Lake.at_the_edge`
+telling it only a chain's standing wants and the delayed live kind.
 """
 
 from __future__ import annotations
@@ -103,32 +102,18 @@ class Lake(listings.Feed):
         self.quality = EdgeChecks(clock_ns=self.clock_ns)
 
     def at_the_edge(self, key: str, rows: list[Any], want_id: str) -> list[Any]:
-        """Rows of the dataset `key` recorded unasked or for a standing
-        want, their age at the edge recorded and judged by the SDK's
-        checks; rows pulled for a read as they are. A chain's quotes are
-        judged series by series (their subject is the underlying).
-        TEMPORARY until the SDK's listings feed does it (SDK 0.33.2)."""
-        standing = {w.want_id for w in self.standing.values()}
-        standing |= {w for held in self.chains.underlyings.values() for w in held.standing}
-        if want_id and want_id not in standing:
-            return rows
-        dataset = self.named(key)
-        if self.latency is not None:
-            for row in rows:
-                self.latency.aged(dataset, "AGE_HOP_EDGE", row)
-        if key not in (OPTIONS, OPTIONS_DELAYED):
-            return self.quality.judged(key, rows)
-        out: list[Any] = []
-        for row in rows:
-            series = row.meta.series_key[0].value if row.meta.series_key else ""
-            out.extend(self.quality.judged(f"{key}/{series}", [row]))
+        """The SDK's edge (open-meridian 0.35's `listings.at_the_edge`: each
+        row recorded unasked or for a standing want aged and judged, a
+        chain's within its series), told what is Tradier's: a chain's
+        standing want stands too, and the live kind is recorded into
+        `live_delayed` while the environment is delayed."""
+        chains = {w for held in self.chains.underlyings.values() for w in held.standing}
+        if want_id in chains:
+            want_id = ""
+        if key == LIVE and self.delayed:
+            key = LIVE_DELAYED
+        out: list[Any] = super().at_the_edge(key, rows, want_id)
         return out
-
-    async def _record(self, key: str, data_type: str, rows: Any, want_id: str) -> None:
-        if key in (LIVE, TRADES) and data_type in (PRICE, QUOTE, TRADE):
-            in_force = LIVE_DELAYED if key == LIVE and self.delayed else key
-            rows = self.at_the_edge(in_force, list(rows), want_id)
-        await super()._record(key, data_type, rows, want_id)
 
     def attributes(self, stated: Any) -> listings.Attributes:
         said = conditions.trade_attributes(stated.flag, stated.session, stated.correction)
@@ -148,7 +133,7 @@ class Lake(listings.Feed):
 
     def named(self, key: str) -> str:
         """A declared dataset's ID in the deployment, by its own key."""
-        return super().dataset(key)
+        return super().named(key)
 
     def dataset(self, key: str) -> str:
         """The dataset the feed's `key` is recorded into now: the live kind
@@ -172,7 +157,7 @@ class Lake(listings.Feed):
         self.chains.reset()
         self.restream()
 
-    async def on_want(self, heard: Any) -> None:
+    async def on_observations_wanted(self, heard: Any) -> None:
         """A want of the live kind's other timeliness is declined, not
         covered (this environment does not serve it); any other is the
         SDK's to answer."""
@@ -184,12 +169,12 @@ class Lake(listings.Feed):
             subjects = [s.entity_id for s in want.subjects]
             await self._decline(LIVE, want.want_id, subjects, "not_covered", settled=False)
             return
-        await super().on_want(heard)
+        await super().on_observations_wanted(heard)
 
-    async def on_withdrawn(self, heard: Any) -> None:
+    async def on_want_withdrawn(self, heard: Any) -> None:
         """A standing want withdrawn, a chain's among them."""
         self.chains.withdraw(heard.message.want_id)
-        await super().on_withdrawn(heard)
+        await super().on_want_withdrawn(heard)
 
     async def tick(self) -> None:
         """The SDK's timetable, then the chains due (chains.py)."""

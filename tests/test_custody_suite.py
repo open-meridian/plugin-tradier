@@ -195,12 +195,13 @@ class Read:
             keyless=True,
             synthetic=True,
         )
-        self.syncer = Syncer(
-            recorder,
-            lambda: self.broker,
-            paper=lambda: False,
-            stale_after=lambda: timedelta(hours=36),
-            currencies=lambda: self.currencies,
+        self.syncer = recorder.bind(
+            Syncer(
+                lambda: self.broker,
+                paper=lambda: False,
+                stale_after=lambda: timedelta(hours=36),
+                currencies=lambda: self.currencies,
+            )
         )
         #: The Account currency setting's rows: every account's USD, set by a
         #: plugin admin.
@@ -279,8 +280,8 @@ def thin(recorder: Recorder) -> Awaitable[None]:
 
 def paged(**caller: Any) -> Callable[[Recorder], PageClient]:
     def client(recorder: Recorder) -> PageClient:
-        syncer = Syncer(
-            recorder, lambda: None, paper=lambda: False, stale_after=lambda: timedelta(hours=36)
+        syncer = recorder.bind(
+            Syncer(lambda: None, paper=lambda: False, stale_after=lambda: timedelta(hours=36))
         )
         syncer.status.accounts[NUMBER] = custody.AccountStatus(state="Current")
         syncer.profiles[NUMBER] = profile()

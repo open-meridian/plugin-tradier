@@ -62,7 +62,7 @@ def state_for(tmp: Path, sandbox: bool, transport: Scripted) -> State:
     assert source is not None
     recorder = Recorder("tradier-1")
     answer_records(recorder, RECORDS)
-    lake = Lake(recorder, source, Products(tmp / "products.json"), Clock(at("2026-10-10", 9)))
+    lake = recorder.bind(Lake(source, Products(tmp / "products.json"), Clock(at("2026-10-10", 9))))
     lake.streaming = not config.on_sandbox
     lake.delayed = config.on_sandbox
     wanted: list[list[str]] = []
@@ -71,7 +71,7 @@ def state_for(tmp: Path, sandbox: bool, transport: Scripted) -> State:
         pass
 
     streamer = Streamer(lambda: feed_for(state, store), nothing, nothing)
-    streamer.want = lambda symbols: wanted.append(list(symbols))  # type: ignore[method-assign]
+    streamer.want = lambda wanted_: wanted.append(list(wanted_))  # type: ignore[method-assign,assignment]
     lake.streamer = streamer
     lake.products.symbols[SPY] = "SPY"
     lake.standing["WNT-1"] = Standing("WNT-1", (SPY,), LIVE_KINDS, at("2026-10-10", 9))
