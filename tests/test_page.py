@@ -81,7 +81,7 @@ def test_the_connection_page_and_its_tool_read_one_source(client: PageClient) ->
     assert data["mode"] == "Sample data" and data["environment"] == "sandbox"
     assert [c["label"] for c in data["credentials"]] == ["Sandbox access token"]
     assert data["limit"].startswith("60 a minute") and data["sessions"] == 1
-    assert data["stream"]["state"] == "streaming" and data["stream"]["subscribed"] == 1
+    assert data["stream"]["state"] == "Open" and data["stream"]["subscribed"] == 1
     assert data["stream"]["reconnects"] == 2 and "a gap Tradier&#39;s history" in page
 
 

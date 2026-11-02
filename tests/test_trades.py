@@ -30,7 +30,6 @@ from conftest import (
     Clock,
     answer_records,
     at,
-    hear_row,
     synthetic_lake,
     want,
 )
@@ -77,7 +76,7 @@ async def stand(recorder: Recorder, lake: Lake, *subjects: str, want_id: str = "
         want_id=want_id,
     )
     recorder.answer("ObservationsWanted", lambda _: wanted)
-    await hear_row(recorder, "ObservationsWanted", lake.on_observations_wanted)
+    await recorder.hear(lake, "ObservationsWanted")
 
 
 async def hear(lake: Lake, *events: dict[str, Any]) -> None:
@@ -171,11 +170,11 @@ async def test_trades_are_streamed_only_for_listings_under_a_standing_want(tmp_p
     # A range is not Tradier's to answer: its history names no print.
     ranged = want(SPY, dataset="tradier-1:trades", data_type="meridian.v1.Trade", want_id="WNT-R")
     recorder.answer("ObservationsWanted", lambda _: ranged)
-    await hear_row(recorder, "ObservationsWanted", lake.on_observations_wanted)
+    await recorder.hear(lake, "ObservationsWanted")
     (declined,) = recorder.on("DeclineWant")
     assert declined.want_id == "WNT-R" and declined.reason == ops.UNANSWERED_REASON_NOT_COVERED
     recorder.answer("WantWithdrawn", lambda _: [ops.WantWithdrawnEvent(want_id="WNT-T")])
-    await hear_row(recorder, "WantWithdrawn", lake.on_want_withdrawn)
+    await recorder.hear(lake, "WantWithdrawn")
     assert lake.streamed == []
 
 
@@ -215,7 +214,7 @@ async def test_a_quote_a_reader_wants_is_read_from_tradiers_quotes_in_shares(
     recorder, lake, _ = made(tmp_path, at("2026-10-10", 9))
     wanted = want(SPY, BRK, dataset="tradier-1:live", data_type="meridian.v1.Quote")
     recorder.answer("ObservationsWanted", lambda _: wanted)
-    await hear_row(recorder, "ObservationsWanted", lake.on_observations_wanted)
+    await recorder.hear(lake, "ObservationsWanted")
     (sent,) = recorder.on("RecordQuotes")
     assert sent.want_id == "WNT-1"
     by = {q.meta.row_key.split(":")[0]: q for q in sent.quotes}

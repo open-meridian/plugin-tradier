@@ -69,7 +69,6 @@ from conftest import (
     Clock,
     answer_records,
     at,
-    hear_row,
     synthetic_lake,
     want,
 )
@@ -181,7 +180,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
     async def wanted(recorder: Recorder, event: ops.ObservationsWantedEvent) -> None:
         held = lake(recorder)
         recorder.answer("ObservationsWanted", lambda _: event)
-        await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
+        await recorder.hear(held, "ObservationsWanted")
 
     async def daily_close(recorder: Recorder) -> None:
         # The plugin resolves a listing by its own symbol, then records the
@@ -190,7 +189,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
         await held.seed_symbols(["BRK.B"])
         (subject,) = held.products.symbols
         recorder.answer("ObservationsWanted", lambda _: want(subject, business_date=DAY))
-        await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
+        await recorder.hear(held, "ObservationsWanted")
 
     async def forming(recorder: Recorder) -> None:
         clock = Clock(DURING)
@@ -216,7 +215,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
             subject, dataset="suite-plugin:trades", data_type="meridian.v1.Trade", standing=True
         )
         recorder.answer("ObservationsWanted", lambda _: event)
-        await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
+        await recorder.hear(held, "ObservationsWanted")
         for n, said in enumerate(messages):
             await held.heard(convert.streamed(said, f"stream/suite#{n}"))
         await held.flush(force=True)
@@ -255,7 +254,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
             SPY, dataset="suite-plugin:live", data_type="meridian.v1.Quote", standing=True
         )
         recorder.answer("ObservationsWanted", lambda _: event_)
-        await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
+        await recorder.hear(held, "ObservationsWanted")
         await held.heard(
             convert.streamed(
                 event(type="quote", symbol="SPY", bid="575.45", bidsz=3, ask="575.48", asksz=2),
@@ -270,7 +269,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
         held = lake(recorder)
         event_ = want(SPY, dataset="suite-plugin:options", data_type="meridian.v1.ListedSeries")
         recorder.answer("ObservationsWanted", lambda _: event_)
-        await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
+        await recorder.hear(held, "ObservationsWanted")
 
     async def alive(recorder: Recorder) -> None:
         # Contract v27 (0.32.3's listings feed): a stream message with no price
@@ -313,7 +312,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
             lambda _: ops.ResolveVenueResult(found=False, miss_reason=ops.MISS_REASON_NOT_FOUND),
         )
         recorder.answer("ObservationsWanted", lambda _: want(SPY, dataset="suite-plugin:live"))
-        await hear_row(recorder, "ObservationsWanted", held.on_observations_wanted)
+        await recorder.hear(held, "ObservationsWanted")
 
     async def recorded_against(recorder: Recorder) -> None:
         await wanted(recorder, want(SPY, business_date=DAY))
@@ -350,7 +349,7 @@ def producers(tmp: Path) -> dict[str, Producer]:
             "WantWithdrawn",
             lambda _: [ops.WantWithdrawnEvent(want_id="WNT-9", dataset="suite-plugin:live")],
         )
-        await hear_row(recorder, "WantWithdrawn", held.on_want_withdrawn)
+        await recorder.hear(held, "WantWithdrawn")
         clock.now += 3600 * 10**9
         await held.tick()
 

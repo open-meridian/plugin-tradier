@@ -19,7 +19,7 @@
 {{ om.row("Not entitled", data.not_entitled or ("Nothing" if data.entitled_at_vendor else "Not reported")) }}
 {% elif section == "Stream" and data.stream %}
 {% set s = data.stream %}
-{{ om.row("State", s.state|capitalize, ((s.subscribed ~ " listings, since " ~ (s.since|shown)) if s.state == "streaming" else "")) }}
+{{ om.row("State", s.state, ((s.subscribed ~ " listings, since " ~ (s.since|shown)) if s.state == "Open" else "")) }}
 {{ om.row("Reconnects", s.reconnects, "each a gap Tradier's history cannot fill") }}
 <tr class="wide-only"><th scope="row">Messages</th><td>{{ s.messages }}{% if s.last_message_at %} <span class="hint">last {{ s.last_message_at|shown }}</span>{% endif %}</td><td class="more"></td></tr>
 {% endif %}
