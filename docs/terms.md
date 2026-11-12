@@ -11,11 +11,12 @@ A summary, not legal advice. Read Tradier's own terms before relying on it.
   holder's personal use.
 - **Option chains:** US options data is the options exchanges' (OPRA's),
   licensed apart from stock data; the plugin declares its chains as two
-  datasets of their own (`options`, `options_delayed`), served and not kept
-  by default, so you license and entitle them apart.
+  datasets of their own (`options`, `options_delayed`), so you license and
+  entitle them apart.
 
-So the plugin declares each dataset's terms as one person's. Your
-deployment's Data sources page records the licence you enter, and warns
+Each dataset describes these terms in words on your deployment's Data
+sources page, and declares no licence: on them, the licence you enter is
+one person's. The page records the licence you enter, and warns
 when more than one person can read a plugin entitled to a one-person
 dataset. Open Meridian does not decide whether your use meets Tradier's
 terms; the licence records what you entered.

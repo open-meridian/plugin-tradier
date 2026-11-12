@@ -12,10 +12,9 @@ whatever reads prices, from the same image.
 
 1. The catalogue: the datasets listed by `dashboard__list_datasets`,
    as the plugin declared them -- daily pulled and pushed, its day New
-   York's to 16:00; live pulled and streamed; trades streamed,
-   kept two days; from 0.13.0 the chains' two, pulled and served, not
-   kept -- each with Tradier's terms, one person's, as its default
-   licence.
+   York's to 16:00; live pulled and streamed; trades streamed; from
+   0.13.0 the chains' two, pulled -- each describing Tradier's terms and
+   pricing in words (contract 30), and how a gap in it is recovered.
 2. Licensed and entitled: the deployment admin licenses the three, and
    entitles the reader to them, the broker reloaded with each.
 3. A close wanted: the reader reads SPY's close for 2026-10-08, which the lake
@@ -194,19 +193,18 @@ def run():
     must(daily["modes"] == ["pull", "push"] and live["modes"] == ["pull", "stream"]
          and trades_entry["modes"] == ["stream"],
          f"step 1, the modes: {daily['modes']}, {live['modes']}, {trades_entry['modes']}")
-    must(trades_entry["licence_default"]["kept"] is True
-         and trades_entry["licence_default"]["retention_days"] == 2,
-         f"step 1, trades kept two days by default: {trades_entry['licence_default']}")
-    # The chains' (0.13.0): pulled, served and not kept by default.
+    must(trades_entry.get("gap_recovery") == "stream_only" and daily.get("gap_recovery") == "backfill",
+         f"step 1, how a gap is recovered: {trades_entry.get('gap_recovery')}, {daily.get('gap_recovery')}")
+    # The chains' (0.13.0): pulled, OPRA's data licensed apart.
     options, delayed = held[OPTIONS]["catalogue_entry"], held[OPTIONS_DELAYED]["catalogue_entry"]
     must(options["modes"] == ["pull"] and delayed["modes"] == ["pull"]
-         and options["licence_default"]["kept"] is False,
+         and "OPRA" in json.dumps(options.get("terms_and_pricing", "")),
          f"step 1, the chains' datasets: {options}, {delayed}")
     must(daily["day_time_zone"] == "America/New_York" and daily["day_end_minute"] == 960,
          f"step 1, the declared day: {daily}")
-    must(daily["licence_default"]["personal_use"] is True and daily["licence_default"]["kept"] is True
-         and live["licence_default"]["kept"] is False,
-         f"step 1, Tradier's terms as the default licence: {daily['licence_default']}, {live['licence_default']}")
+    must(all("personal use only" in json.dumps(e.get("terms_and_pricing", "")) for e in (daily, live))
+         and "licence_default" not in daily,
+         f"step 1, Tradier's terms in words: {daily.get('terms_and_pricing')}")
 
     # 2. Licensed and entitled.
     runner("licence", DAILY, "kept=true", "retention_days=0", "derived_use=true", "display=true",
