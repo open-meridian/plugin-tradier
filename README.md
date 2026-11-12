@@ -22,7 +22,8 @@ It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
 pass the same suites of the SDK, unchanged.
 
-**Status:** 0.14.1, on open-meridian 0.35.3 (contract 29): one class for
+**Status:** 0.15.0, on open-meridian 0.36.0 (contract 30: each dataset's
+terms and pricing in words, and how a gap in it is recovered): one class for
 each role it holds -- the data role's `Market` (the SDK's listings feed
 and its option chains), custody's `Custodian`, connectivity's `Trading`
 (the SDK's `Trader`) -- registered with `meridian.run`, and its stream kept
@@ -47,14 +48,14 @@ SDK, CLI 0.1.52 and core v28 (8def82a), by tag and digest.
 
 ## What it serves
 
-| Dataset | What | From | Arrives | Default terms |
+| Dataset | What | From | Arrives | A gap recovered by |
 |---|---|---|---|---|
-| `daily` | each listing's close and daily bar (open, high, low, close, volume) for a business date, New York's day ending at the 16:00 close | Tradier's daily history, consolidated across exchanges | pulled when a reader's read is wanted; pushed once a session's close is final, for the listings it has served | kept; personal use |
-| `live` | the last trade's price (`last`), the best bid and ask; the best bid and offer as a quote, with its sizes in shares | Tradier's quotes, consolidated from every exchange, real time for a Tradier Brokerage account holder | pulled for a read; while a standing want stands, prices kept current once a minute and quotes streamed, at most one a second per listing | served, not kept; personal use |
-| `live_delayed` | the same as `live` (ruling 551, one dataset per timeliness), declaring a 15-minute delay | Tradier's developer sandbox, delayed 15 minutes, recorded while Environment is Sandbox (`live` while it is Live) | pulled for a read; while a standing want stands, kept current once a minute; never streamed | served, not kept; personal use |
-| `options` | an underlying's option chain: each series' terms (the platform's listed-option template), its best bid and offer with sizes in contracts, its open interest and volume, under the underlying and keyed by OCC symbol | Tradier's option expirations and chains, real time for a Tradier Brokerage account holder; recorded while Environment is Live | pulled for a want of an underlying's series, quotes or statistics, every expiration; while a standing want stands, each expiration kept current at most once a minute | served, not kept; personal use |
-| `options_delayed` | the same as `options` (ruling 660, one dataset per timeliness), declaring a 15-minute delay | Tradier's developer sandbox, recorded while Environment is Sandbox | as `options` | served, not kept; personal use |
-| `trades` | each time and sale with the platform's trade attributes and Tradier's sequence number | Tradier's stream | streamed for the listings under a standing want | kept two days; personal use |
+| `daily` | each listing's close and daily bar (open, high, low, close, volume) for a business date, New York's day ending at the 16:00 close | Tradier's daily history, consolidated across exchanges | pulled when a reader's read is wanted; pushed once a session's close is final, for the listings it has served | backfill |
+| `live` | the last trade's price (`last`), the best bid and ask; the best bid and offer as a quote, with its sizes in shares | Tradier's quotes, consolidated from every exchange, real time for a Tradier Brokerage account holder | pulled for a read; while a standing want stands, prices kept current once a minute and quotes streamed, at most one a second per listing | the stream only |
+| `live_delayed` | the same as `live` (ruling 551, one dataset per timeliness), declaring a 15-minute delay | Tradier's developer sandbox, delayed 15 minutes, recorded while Environment is Sandbox (`live` while it is Live) | pulled for a read; while a standing want stands, kept current once a minute; never streamed | none |
+| `options` | an underlying's option chain: each series' terms (the platform's listed-option template), its best bid and offer with sizes in contracts, its open interest and volume, under the underlying and keyed by OCC symbol | Tradier's option expirations and chains, real time for a Tradier Brokerage account holder; recorded while Environment is Live | pulled for a want of an underlying's series, quotes or statistics, every expiration; while a standing want stands, each expiration kept current at most once a minute | none |
+| `options_delayed` | the same as `options` (ruling 660, one dataset per timeliness), declaring a 15-minute delay | Tradier's developer sandbox, recorded while Environment is Sandbox | as `options` | none |
+| `trades` | each time and sale with the platform's trade attributes and Tradier's sequence number | Tradier's stream | streamed for the listings under a standing want | the stream only |
 
 - A daily price is keyed by a plain date, Tradier's own `date`. A day still
   forming is recorded and restated under the same row as it fills, until
@@ -143,10 +144,11 @@ Not legal advice: read Tradier's own terms before relying on this.
   exchange, at no charge for API access, up to 120 requests a minute per
   token; the developer sandbox is delayed 15 minutes.
 
-So each dataset's default licence is one person's (`personal_use`), shown and
-used by its holder. The deployment admin confirms or changes it on the Data
-sources page, which warns when more than one person can read a plugin
-entitled to a one-person dataset. Neither this plugin nor its documentation
+Each dataset describes these terms in words (`terms_and_pricing`, contract
+30), shown on the Data sources page and the Datasets page; it declares no
+licence. The deployment admin sets the licence there -- one person's, shown
+and used by its holder, on these terms -- and the page warns when more than
+one person can read a plugin entitled to a one-person dataset. Neither this plugin nor its documentation
 says a deployment meets Tradier's terms: the licence records what the admin
 entered.
 

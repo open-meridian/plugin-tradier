@@ -41,16 +41,18 @@ plan's Q21 and Q40 have a source's daily and live data and its trades, and from
   streamed (lake.py says why); apart from the live prices (the plan's Q40),
   so an admin licenses and keeps them apart.
 
-**The terms Tradier's standard terms impose** (`licence_default`), which the
-deployment's admin confirms or replaces on the Data sources page: "Unless
-you are a Tradier Partner, Tradier APIs are entitled for personal use only",
-market data goes only to active account holders and is never redistributed
-to anyone without one.
-So each dataset's terms are one person's (`personal_use`), shown and used
-by its holder (`display`, `derived_use`); the daily one kept, the live one
-and the chains' served and not kept, the trades kept two days (the plan's
-Q40: a reader that lost some catches up from the lake). A summary, not
-legal advice; the README says the same.
+**The terms and pricing Tradier states** (contract 30, ruling 1032;
+`terms_and_pricing`), in plain words for each dataset: personal use only
+unless a Tradier Partner, market data only to active Tradier Brokerage
+account holders and never redistributed, real time at no charge for API
+access, the sandbox delayed 15 minutes, OPRA's options data licensed apart
+-- never a licence: the licence the deployment's admin sets on Data sources
+is the one enforced. A summary, not legal advice; the README says the same.
+
+**How a gap is recovered** (contract 30, `gap_recovery`): `daily` by
+`backfill` (Tradier serves the daily history again on a want); `live` and
+`trades`, streamed, `stream_only`; `live_delayed` and the chains, served
+as they stand now, `none`.
 
 **The storage**, at the edge (decisions/028): Tradier's raw responses, every
 row's raw record, and the product map. The account side keeps three kinds
@@ -64,7 +66,7 @@ role's raw responses kept within it.
 
 from __future__ import annotations
 
-from meridian import DatasetDeclaration, DatasetLicence
+from meridian import DatasetDeclaration
 
 from .chains import CADENCE_SECONDS as CHAIN_CADENCE_SECONDS
 from .chains import DATA_TYPES as CHAIN_DATA_TYPES
@@ -75,8 +77,20 @@ from .lake import DAILY, LIVE, LIVE_CADENCE_SECONDS, LIVE_DELAYED, OPTIONS, OPTI
 VENDOR = "Tradier"
 #: How long a raw response is kept: the reach of a re-conversion.
 RETENTION_DAYS = max(kind.window_days for kind in KINDS)
-#: How long the lake keeps a trade by default: two days (the plan's Q40).
-TRADES_KEPT_DAYS = 2
+#: Tradier's terms and pricing in plain words (contract 30, ruling 1032), as
+#: the README summarises them: every dataset's terms end with these.
+TRADIER_TERMS = (
+    "Unless you are a Tradier Partner, Tradier's APIs are entitled for personal use only. "
+    "Market data goes only to active Tradier Brokerage account holders, and is never "
+    "redistributed to anyone without one; a personal deployment may keep its own copy for "
+    "the account holder's personal use. An account holder's market data is real time and "
+    "consolidated from every exchange, at no charge for API access, up to 120 requests a "
+    "minute per token; the developer sandbox is delayed 15 minutes."
+)
+#: The options datasets' words first: OPRA's data, licensed apart.
+OPTIONS_TERMS = (
+    "US options data is the options exchanges' (OPRA's), licensed apart from stock data. "
+)
 #: Tradier documents no limit to its daily history: none is stated.
 HISTORY_DAYS = 0
 #: How far behind real time the developer sandbox serves quotes: 15 minutes.
@@ -103,9 +117,8 @@ CATALOGUE = (
         modes=["pull", "push"],
         cadence=86_400,
         history=HISTORY_DAYS,
-        licence_default=DatasetLicence(
-            kept=True, derived_use=True, display=True, personal_use=True
-        ),
+        terms_and_pricing=TRADIER_TERMS,
+        gap_recovery="backfill",
         day_time_zone="America/New_York",
         day_end_minute=DAY_END_MINUTE,
         calendar_id=US_EQUITY_CALENDAR,
@@ -116,9 +129,8 @@ CATALOGUE = (
         data_types=["meridian.v1.Price", "meridian.v1.Quote"],
         modes=["pull", "stream"],
         cadence=LIVE_CADENCE_SECONDS,
-        licence_default=DatasetLicence(
-            kept=False, derived_use=True, display=True, personal_use=True
-        ),
+        terms_and_pricing=TRADIER_TERMS,
+        gap_recovery="stream_only",
         day_time_zone="America/New_York",
         day_end_minute=DAY_END_MINUTE,
     ),
@@ -128,9 +140,8 @@ CATALOGUE = (
         data_types=["meridian.v1.Price", "meridian.v1.Quote"],
         modes=["pull"],
         cadence=LIVE_CADENCE_SECONDS,
-        licence_default=DatasetLicence(
-            kept=False, derived_use=True, display=True, personal_use=True
-        ),
+        terms_and_pricing=TRADIER_TERMS,
+        gap_recovery="none",
         day_time_zone="America/New_York",
         day_end_minute=DAY_END_MINUTE,
         declared_delay_ns=SANDBOX_DELAY_NS,
@@ -141,9 +152,8 @@ CATALOGUE = (
         data_types=list(CHAIN_DATA_TYPES),
         modes=["pull"],
         cadence=CHAIN_CADENCE_SECONDS,
-        licence_default=DatasetLicence(
-            kept=False, derived_use=True, display=True, personal_use=True
-        ),
+        terms_and_pricing=OPTIONS_TERMS + TRADIER_TERMS,
+        gap_recovery="none",
         day_time_zone="America/New_York",
         day_end_minute=DAY_END_MINUTE,
         calendar_id=US_EQUITY_CALENDAR,
@@ -154,9 +164,8 @@ CATALOGUE = (
         data_types=list(CHAIN_DATA_TYPES),
         modes=["pull"],
         cadence=CHAIN_CADENCE_SECONDS,
-        licence_default=DatasetLicence(
-            kept=False, derived_use=True, display=True, personal_use=True
-        ),
+        terms_and_pricing=OPTIONS_TERMS + TRADIER_TERMS,
+        gap_recovery="none",
         day_time_zone="America/New_York",
         day_end_minute=DAY_END_MINUTE,
         calendar_id=US_EQUITY_CALENDAR,
@@ -167,13 +176,8 @@ CATALOGUE = (
         vendor=VENDOR,
         data_types=["meridian.v1.Trade", "meridian.v1.Trade.source_sequence"],
         modes=["stream"],
-        licence_default=DatasetLicence(
-            kept=True,
-            retention_days=TRADES_KEPT_DAYS,
-            derived_use=True,
-            display=True,
-            personal_use=True,
-        ),
+        terms_and_pricing=TRADIER_TERMS,
+        gap_recovery="stream_only",
         day_time_zone="America/New_York",
         day_end_minute=DAY_END_MINUTE,
     ),

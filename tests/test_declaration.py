@@ -70,3 +70,25 @@ def test_the_port_is_fixed() -> None:
     interface = version.DECLARATION.interface
     assert interface is not None
     assert interface.port == version.PORT == 8000
+
+
+def test_each_datasets_terms_and_gap_recovery() -> None:
+    # Contract 30 (ruling 1032): Tradier's terms in words, never a licence,
+    # OPRA's first on the chains; how a gap in each is recovered.
+    from tradier.declared import CATALOGUE
+
+    by_key = {d.key: d for d in CATALOGUE}
+    for dataset in CATALOGUE:
+        assert "personal use only" in dataset.terms_and_pricing
+        assert len(dataset.terms_and_pricing) <= 2000 and not dataset.sessions_calendar_id
+        assert dataset.terms_and_pricing.startswith("US options") == dataset.key.startswith(
+            "options"
+        )
+    assert {k: d.gap_recovery for k, d in by_key.items()} == {
+        "daily": "backfill",
+        "live": "stream_only",
+        "live_delayed": "none",
+        "options": "none",
+        "options_delayed": "none",
+        "trades": "stream_only",
+    }

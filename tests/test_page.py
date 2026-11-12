@@ -93,11 +93,11 @@ def test_the_datasets_page_and_its_tool_read_one_source(client: PageClient) -> N
     data = client.call_tool("read_datasets").data
     daily = next(d for d in data["served"] if d["key"] == "daily")
     assert daily["recorded"] == 1 and daily["arrives"] == "pull, push"
-    assert daily["default_terms"] == "kept; personal use" and daily["licensed"] is False
+    assert "personal use only" in daily["default_terms"] and daily["licensed"] is False
     live = next(d for d in data["served"] if d["key"] == "live")
-    assert live["default_terms"] == "served, not kept; personal use"
+    assert live["default_terms"] == daily["default_terms"]
     trades = next(d for d in data["served"] if d["key"] == "trades")
-    assert trades["arrives"] == "stream" and trades["default_terms"].startswith("kept 2")
+    assert trades["arrives"] == "stream" and trades["default_terms"] == daily["default_terms"]
     assert [w["asked"] for w in data["wants"]] == ["trades", "last, bid, ask"]
     assert data["wants"][0]["listings"] == ["SPY"] and data["wants"][0]["streamed"]
     assert data["listings"] == 1 and data["streamed"] == 1
