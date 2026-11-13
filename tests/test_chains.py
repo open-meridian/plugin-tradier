@@ -195,6 +195,31 @@ def test_during_a_session_volume_is_todays(tmp_path: Path) -> None:
     }
 
 
+def test_a_statistic_read_again_keeps_its_valid_time(tmp_path: Path) -> None:
+    """A row key fixes its valid time (spec/the-lake rule 5; SDK 0.36.2): a
+    statistic is valid from the start of the day it describes, in New York,
+    never when it was read, so read again -- here by an instance restarted
+    two hours later -- it is restated under the same valid time."""
+    recorder = Recorder(INSTANCE)
+    hear(
+        recorder, lake_at(recorder, THURSDAY, tmp_path), chain_want(SPY, data_type=chains.STATISTIC)
+    )
+    first = rows(recorder, "RecordStatistics", "statistics")
+
+    def midnight(day: str) -> int:
+        start = dt.datetime.combine(dt.date.fromisoformat(day), dt.time(), convert.NEW_YORK)
+        return int(start.timestamp()) * 10**9
+
+    assert first and all(s.meta.valid_from_ns == midnight(s.meta.business_date) for s in first)
+    again = Recorder(INSTANCE)
+    later = THURSDAY + 2 * 3600 * 10**9
+    hear(again, lake_at(again, later, tmp_path), chain_want(SPY, data_type=chains.STATISTIC))
+    second = rows(again, "RecordStatistics", "statistics")
+    assert {s.meta.row_key: s.meta.valid_from_ns for s in second} == {
+        s.meta.row_key: s.meta.valid_from_ns for s in first
+    }
+
+
 def test_a_holiday_is_skipped_by_tradiers_calendar(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -376,3 +401,29 @@ def test_an_unchanged_quote_is_not_recorded_again_and_liveness_keeps_moving(
     clock.now += 10 * 10**9
     asyncio.run(lake.chains.refresh())
     assert len(alive()) == 3
+
+
+def test_a_restart_keeps_every_series_valid_time(tmp_path: Path) -> None:
+    """The row-key rule (spec/the-lake rule 5): a series' terms recorded
+    again after a restart, a day later, keep their key's first valid time,
+    held in the plugin's storage (SDK 0.36.3, option_chains.SeriesTimes)."""
+    kept = tmp_path / "series.json"
+
+    def started(now: int) -> tuple[Recorder, Any]:
+        recorder = Recorder(INSTANCE)
+        answer_records(recorder, RECORDS)
+        return recorder, synthetic_lake(recorder, Clock(now), tmp_path, series_path=kept)
+
+    def times(recorder: Recorder) -> dict[str, int]:
+        series = rows(recorder, "RecordSeries", "series")
+        return {s.meta.row_key: s.meta.valid_from_ns for s in series}
+
+    recorder, lake = started(THURSDAY)
+    hear(recorder, lake, chain_want(SPY))
+    first = times(recorder)
+    assert first and set(first.values()) == {THURSDAY}
+    # Restarted the next day: a reader waiting is answered under each
+    # series' first valid time.
+    again, restarted = started(THURSDAY + 24 * 3600 * 10**9)
+    hear(again, restarted, chain_want(SPY))
+    assert times(again) == first

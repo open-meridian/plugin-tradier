@@ -72,13 +72,14 @@ import logging
 from collections import deque
 from collections.abc import Sequence
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any
 
 from meridian.errors import MeridianError
 from meridian.helpers import chains as helpers
 from meridian.operations import Money, Quote, SourceTime
 from meridian.plugin.v1 import operations_pb2 as ops
-from meridian.roles.data import SentRows
+from meridian.roles.data import SentRows, option_chains
 from meridian.roles.data.listings import Counts
 
 from .convert import NEW_YORK, ChainOption, new_york_date
@@ -141,8 +142,11 @@ class Chains:
     """The chains wanted of `lake` (lake.Lake), read from its source and
     recorded."""
 
-    def __init__(self, lake: Any) -> None:
+    def __init__(self, lake: Any, series_path: Path | None = None) -> None:
         self.lake = lake
+        #: Each series' first valid time and subject (SDK 0.36.3), in the
+        #: plugin's storage; never cleared on a reset.
+        self.series_times = option_chains.SeriesTimes(series_path)
         self.underlyings: dict[str, Underlying] = {}
         #: Tradier's type of each listing asked about (`stock`, `etf`, ...).
         self.kinds: dict[str, str] = {}
@@ -355,7 +359,7 @@ class Chains:
             self.read_count += 1
             self.alive_ns = held.read_at[expiry]
             want_id = waiting[0] if waiting else min(held.standing, default="")
-            await self.record(held, listed, want_id)
+            await self.record(held, listed, want_id, waiting=bool(waiting))
         self._forget(held)
 
     # ── Dates ────────────────────────────────────────────────────────────
@@ -392,7 +396,9 @@ class Chains:
             out["volume"] = today.isoformat()
         return out
 
-    async def record(self, held: Underlying, listed: Sequence[ChainOption], want_id: str) -> None:
+    async def record(
+        self, held: Underlying, listed: Sequence[ChainOption], want_id: str, waiting: bool = False
+    ) -> None:
         """A chain's series, quotes and statistics, each sent only where it
         changed: its series' terms, its quotes judged at the edge."""
         dataset = self.dataset()
@@ -407,8 +413,14 @@ class Chains:
                 continue
             raw = self.lake.plugin.raw_record(option.raw_key[:256])
             key = helpers.osi_key(option.osi)
-            try:
-                row = helpers.option_series(
+
+            def build(
+                valid_from_ns: int,
+                adjusted_on: dt.date | None,
+                option: Any = option,
+                raw: Any = raw,
+            ) -> Any:
+                return helpers.option_series(
                     held.subject,
                     option.osi,
                     template_id=TEMPLATE_ID,
@@ -419,14 +431,20 @@ class Chains:
                     settlement_method=PHYSICAL,
                     contract_multiplier=option.contract_size,
                     deliverable=[(held.subject, STANDARD_SHARES)] if option.standard else (),
-                    valid_from_ns=now,
+                    valid_from_ns=valid_from_ns,
                     raw=raw,
+                    adjusted_on=adjusted_on,
                 )
+
+            try:
+                row = self.series_times.series(
+                    build, dataset=dataset, osi=option.osi, subject=held.subject, now_ns=now,
+                    today=new_york_date(now), waiting=waiting,
+                )  # fmt: skip
             except ValueError:
                 self.counts.unconverted += 1
                 continue
-            terms = repr([(f.path, f.value) for f in row.fields])
-            if self.sent.changed(SERIES, dataset, option.osi, terms):
+            if row is not None:
                 series.append(row)
             quote = self.quote(held.subject, option, key, dataset, raw)
             if quote is not None:
@@ -441,13 +459,18 @@ class Chains:
                 if value is None or not day:
                     continue
                 stat = helpers.statistic(
-                    held.subject, key, kind, value, day, dataset=dataset, valid_from_ns=now, raw=raw
+                    held.subject, key, kind, value, day, dataset=dataset, raw=raw
                 )
                 assert stat.meta is not None
                 if self.sent.changed(STATISTIC, dataset, stat.meta.row_key, str(value)):
                     statistics.append(stat)
         if series:
-            await self.send("series", series, want_id)
+
+            async def send_batch(batch: list[Any]) -> None:
+                await self.send("series", batch, want_id)
+
+            today = new_york_date(now)
+            self.counts.unchanged += await self.series_times.record(send_batch, series, today)
         if quotes:
             await self.send("quotes", self.lake.at_the_edge(self.key(), quotes, want_id), want_id)
         if statistics:

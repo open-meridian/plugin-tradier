@@ -92,6 +92,7 @@ def synthetic_lake(
     tmp: Path,
     held: Mapping[str, Any] | None = None,
     parse: Callable[[str], Any] | None = None,
+    series_path: Path | None = None,
 ) -> Lake:
     store = RawStore(tmp / "raw")
     tradier = Tradier(
@@ -107,7 +108,12 @@ def synthetic_lake(
 
         vendor.parse = parse  # type: ignore[assignment]
     lake: Lake = recorder.bind(
-        Lake(TradierSource(tradier, synthetic=True), Products(tmp / "products.json"), clock)
+        Lake(
+            TradierSource(tradier, synthetic=True),
+            Products(tmp / "products.json"),
+            clock,
+            series_path=series_path,
+        )
     )
     return lake
 

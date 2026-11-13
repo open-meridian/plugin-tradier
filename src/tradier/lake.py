@@ -40,6 +40,7 @@ telling it only a chain's standing wants and the delayed live kind.
 from __future__ import annotations
 
 import datetime as dt
+from pathlib import Path
 from typing import Any
 
 from meridian.plugin.v1 import operations_pb2 as ops
@@ -91,11 +92,11 @@ class Lake(listings.Feed):
     history_from = HISTORY_FROM
     settles_declines = False
 
-    def __init__(self, *args: Any, **kwargs: Any) -> None:
+    def __init__(self, *args: Any, series_path: Path | None = None, **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
         #: The option chains wanted (from 0.13.0), counted as one dataset.
         self.counts[OPTIONS] = listings.Counts()
-        self.chains = Chains(self)
+        self.chains = Chains(self, series_path)
         #: The plugin's `roles.Latency`, where it keeps one: each live row's
         #: age at the edge recorded (the feed delay); and the edge's checks.
         self.latency: Any = None

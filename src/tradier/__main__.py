@@ -347,7 +347,11 @@ class Market(Lake):
 
     def __init__(self, process: Process) -> None:
         granted = process.granted
-        super().__init__(None, Products(granted / "products.json" if granted else None))
+        super().__init__(
+            None,
+            Products(granted / "products.json" if granted else None),
+            series_path=granted / "series.json" if granted else None,
+        )
         self.process = process
         self.latency = process.latency
 
