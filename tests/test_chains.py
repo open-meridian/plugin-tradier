@@ -195,6 +195,31 @@ def test_during_a_session_volume_is_todays(tmp_path: Path) -> None:
     }
 
 
+def test_a_statistic_read_again_keeps_its_valid_time(tmp_path: Path) -> None:
+    """A row key fixes its valid time (spec/the-lake rule 5; SDK 0.36.2): a
+    statistic is valid from the start of the day it describes, in New York,
+    never when it was read, so read again -- here by an instance restarted
+    two hours later -- it is restated under the same valid time."""
+    recorder = Recorder(INSTANCE)
+    hear(
+        recorder, lake_at(recorder, THURSDAY, tmp_path), chain_want(SPY, data_type=chains.STATISTIC)
+    )
+    first = rows(recorder, "RecordStatistics", "statistics")
+
+    def midnight(day: str) -> int:
+        start = dt.datetime.combine(dt.date.fromisoformat(day), dt.time(), convert.NEW_YORK)
+        return int(start.timestamp()) * 10**9
+
+    assert first and all(s.meta.valid_from_ns == midnight(s.meta.business_date) for s in first)
+    again = Recorder(INSTANCE)
+    later = THURSDAY + 2 * 3600 * 10**9
+    hear(again, lake_at(again, later, tmp_path), chain_want(SPY, data_type=chains.STATISTIC))
+    second = rows(again, "RecordStatistics", "statistics")
+    assert {s.meta.row_key: s.meta.valid_from_ns for s in second} == {
+        s.meta.row_key: s.meta.valid_from_ns for s in first
+    }
+
+
 def test_a_holiday_is_skipped_by_tradiers_calendar(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
