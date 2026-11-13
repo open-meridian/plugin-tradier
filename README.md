@@ -22,8 +22,9 @@ It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
 pass the same suites of the SDK, unchanged.
 
-**Status:** 0.15.0, on open-meridian 0.36.0 (contract 30: each dataset's
-terms and pricing in words, and how a gap in it is recovered): one class for
+**Status:** 0.15.1, on open-meridian 0.36.3 (contract 30: each dataset's
+terms and pricing in words, and how a gap in it is recovered; a row key's
+valid time fixed, below): one class for
 each role it holds -- the data role's `Market` (the SDK's listings feed
 and its option chains), custody's `Custodian`, connectivity's `Trading`
 (the SDK's `Trader`) -- registered with `meridian.run`, and its stream kept
@@ -82,6 +83,16 @@ SDK, CLI 0.1.52 and core v28 (8def82a), by tag and digest.
   (`SPY:1d:2026-10-08@LCL-...`), never one recorded over the other. A day
   read again unchanged is kept unchanged. Rows recorded before 0.2.0 keep
   their keys and stand beside the new ones.
+- A row key fixes its valid time (spec/the-lake rule 5; open-meridian
+  0.36.3): an option series' open interest and volume are valid from the
+  start of the market day they describe, in New York, never when they were
+  read. A series' terms keep their key's first valid time and first
+  underlying, held across restarts in the plugin's storage (`series.json`,
+  through the SDK's `option_chains.SeriesTimes`); terms changed since are an
+  adjustment, a new key valid from that day (`<OSI>:<date>:ADJ`); a series
+  the lake already holds under another first valid time is taken as
+  recorded, said once, and one asked under another underlying than its
+  first is skipped and counted.
 - Not here: mutual funds (Tradier documents them as not available); an
   index's option chain; greeks (the deployment computes its own); OCC's
   files.

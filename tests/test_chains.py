@@ -401,3 +401,29 @@ def test_an_unchanged_quote_is_not_recorded_again_and_liveness_keeps_moving(
     clock.now += 10 * 10**9
     asyncio.run(lake.chains.refresh())
     assert len(alive()) == 3
+
+
+def test_a_restart_keeps_every_series_valid_time(tmp_path: Path) -> None:
+    """The row-key rule (spec/the-lake rule 5): a series' terms recorded
+    again after a restart, a day later, keep their key's first valid time,
+    held in the plugin's storage (SDK 0.36.3, option_chains.SeriesTimes)."""
+    kept = tmp_path / "series.json"
+
+    def started(now: int) -> tuple[Recorder, Any]:
+        recorder = Recorder(INSTANCE)
+        answer_records(recorder, RECORDS)
+        return recorder, synthetic_lake(recorder, Clock(now), tmp_path, series_path=kept)
+
+    def times(recorder: Recorder) -> dict[str, int]:
+        series = rows(recorder, "RecordSeries", "series")
+        return {s.meta.row_key: s.meta.valid_from_ns for s in series}
+
+    recorder, lake = started(THURSDAY)
+    hear(recorder, lake, chain_want(SPY))
+    first = times(recorder)
+    assert first and set(first.values()) == {THURSDAY}
+    # Restarted the next day: a reader waiting is answered under each
+    # series' first valid time.
+    again, restarted = started(THURSDAY + 24 * 3600 * 10**9)
+    hear(again, restarted, chain_want(SPY))
+    assert times(again) == first
