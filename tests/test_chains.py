@@ -310,6 +310,29 @@ def test_a_standing_chain_is_kept_current_and_only_changes_sent(tmp_path: Path) 
     assert lake.chains.read_count == 4 and lake.chains.underlyings == {}
 
 
+def test_several_identical_polls_keep_one_raw_chain(tmp_path: Path) -> None:
+    """A standing chain read again and again, unchanged (0.15.2): one raw
+    record for each expiration, however often it is read, and every row
+    names a record that was kept and holds its values."""
+    recorder = Recorder(INSTANCE)
+    lake = lake_at(recorder, SATURDAY, tmp_path)
+    hear(recorder, lake, chain_want(SPY, standing=True))
+    for _ in range(5):
+        lake.clock_ns.now += 61 * 10**9
+        asyncio.run(lake.chains.refresh())
+    assert lake.chains.read_count == 12
+    raw = tmp_path / "raw"
+    for expiry in ("2026-10-16", "2026-11-20"):
+        assert len(list((raw / "chains" / "SPY" / expiry).glob("*.json"))) == 1, expiry
+    store = lake.source.tradier.store
+    named = [
+        row.meta.raw.key
+        for name, field in (("RecordSeries", "series"), ("RecordQuotes", "quotes"))
+        for row in rows(recorder, name, field)
+    ]
+    assert named and all(store.get(key) is not None for key in named)
+
+
 def test_chains_spend_at_most_their_share_of_the_calls(tmp_path: Path) -> None:
     held = copy.deepcopy(exchange())
     spy = held["options"]["SPY"]

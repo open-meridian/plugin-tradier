@@ -63,6 +63,10 @@ class RawStore:
                 n += 1
                 taken = f"{key}.{n}"
 
+    def has(self, key: str) -> bool:
+        """Whether the record `key` names (a whole answer) is in storage."""
+        return self._path(key).is_file()
+
     def append(self, key: str, line: dict[str, Any]) -> int:
         """Add one message to a stream's record; its index in the record."""
         path = self._path(key).with_suffix(".jsonl")

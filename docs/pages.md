@@ -82,4 +82,6 @@ custodian, the day its last statement is as of, and its state at Tradier.
 
 Under Open and View. What Tradier answered, kept as raw records, followed from
 a fact's or a row's reference, for a person who may read the account; under
-Open, **Restore** brings an archived one back for seven days.
+Open, **Restore** brings an archived one back for seven days. An option chain
+is kept when it changed: a row read from a chain that had not changed names
+the record of that chain as last kept, which holds the same values.

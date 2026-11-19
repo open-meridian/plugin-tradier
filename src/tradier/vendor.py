@@ -30,10 +30,28 @@ the Connection page.
 (`"day": {...}`, `"quote": {...}`), and none as `null`; `parse` leaves that
 to convert.py, which takes either. Prices are JSON numbers, parsed as
 Decimals from their own text, never a float.
+
+**A chain is kept when it changed** (0.15.2): a standing want reads each
+expiration's chain as often as once a minute, day and night, and an
+unchanged chain is not kept again. Its answer is kept only where its body
+(and the URL that asked for it) differs from the last one kept for that
+underlying and expiration, compared by a SHA-256 digest; otherwise the key
+of that last record is returned, which holds exactly what was said, so every
+row converted from the answer names a record that was written and holds its
+values. Nothing in the body is set aside from the comparison: Tradier's
+chain states no time of its asking -- the times in it are each series' own
+(`bid_date`, `ask_date`, `trade_date`), and a quote's time is recorded from
+them. What changes on every call -- when it was received, and the `date` and
+`x-ratelimit-*` headers -- is kept beside the body and outside the
+comparison. A refusal or a rate limit is kept every time, as is any other
+call's answer; a chain whose last record is no longer in storage is kept
+again; and what was last kept is remembered by the process alone, so after a
+restart the first answer is kept.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import time
@@ -221,10 +239,28 @@ class Tradier:
         self.base = base
         self.usage = Usage()
         self._kept = 0
+        #: Each chain's last answer kept (0.15.2), by its key: the digest of
+        #: its URL and body, and the key it was kept under.
+        self._last: dict[str, tuple[str, str]] = {}
 
     def _keep(self, key: str, record: dict[str, Any]) -> str:
         self._kept += 1
         return self.store.keep(f"{key}/{record['received_at_ns']}-{self._kept}", record)
+
+    def _keep_changed(self, key: str, record: dict[str, Any]) -> str:
+        """Keep an answer unless it is a 200 whose URL and body are those of
+        the last 200 kept under `key`, still in storage: then that record's
+        key, which holds what was said. Its own key otherwise."""
+        if record["status"] != 200:
+            return self._keep(key, record)
+        said = f"{record['request']['url']}\n{record['body']}".encode()
+        digest = hashlib.sha256(said).hexdigest()
+        last = self._last.get(key)
+        if last is not None and last[0] == digest and self.store.has(last[1]):
+            return last[1]
+        raw_key = self._keep(key, record)
+        self._last[key] = (digest, raw_key)
+        return raw_key
 
     def _redacted(self, text: str) -> str:
         if self.credentials is not None:
@@ -250,9 +286,12 @@ class Tradier:
         params: Mapping[str, str],
         method: str = "GET",
         hide: Callable[[str], str] = lambda text: text,
+        changed_only: bool = False,
     ) -> Fetched:
         """One call, kept as a raw record before anything reads it; `hide`
-        takes out of the kept body what must not be kept."""
+        takes out of the kept body what must not be kept. `changed_only`
+        (a chain's): an answer the same as the last kept under `key` names
+        that record instead of being kept again (`_keep_changed`)."""
         if self.credentials is None and not self.keyless:
             raise NoKey(f"{call}: no Tradier token is set, so nothing was asked")
         url = f"{self.base}{path}" + (f"?{urllib.parse.urlencode(params)}" if params else "")
@@ -271,7 +310,7 @@ class Tradier:
             self.usage.last_call_at_ns, self.usage.last_status = received, answer.status
             said = self._redacted(answer.body.decode("utf-8", errors="replace"))
             text = hide(said)
-            raw_key = self._keep(
+            raw_key = (self._keep_changed if changed_only else self._keep)(
                 key,
                 {
                     "venue": "tradier",
@@ -327,7 +366,11 @@ class Tradier:
         volume and open interest; no greeks (the engine computes its own)."""
         params = {"symbol": symbol, "expiration": expiration, "greeks": "false"}
         return self.get(
-            "chains", f"chains/{symbol}/{expiration}", "/markets/options/chains", params
+            "chains",
+            f"chains/{symbol}/{expiration}",
+            "/markets/options/chains",
+            params,
+            changed_only=True,
         )
 
     def calendar(self, year: int, month: int) -> Fetched:

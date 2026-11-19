@@ -1,5 +1,29 @@
 # Changelog
 
+## 0.15.2
+
+On open-meridian 0.36.3, contract 30, as 0.15.1. What the lake receives is
+unchanged; what the plugin keeps of an option chain is not.
+
+- **An option chain's raw record kept only when it changed**: a standing
+  want reads each expiration's chain as often as once a minute, day and
+  night, and every answer was kept, unchanged or not, a whole chain each
+  time. Now an answer whose URL and body are the same as the last kept for
+  that underlying and expiration (by a SHA-256 digest) is not kept again,
+  and its rows name that last record, which holds exactly the values they
+  were read from: a row never names a record that was not written. Nothing
+  in the body is left out of the comparison: Tradier's chain states no time
+  of its asking (its times are each series' own, `bid_date`, `ask_date` and
+  `trade_date`, and a quote's time is read from them); when an answer was
+  received and Tradier's `date` and `x-ratelimit-*` headers are kept beside
+  the body, outside the comparison. A refusal or a rate limit is kept every
+  time; after a restart, or where the last record is no longer in storage,
+  the next answer is kept. Every other call's answer is kept as before.
+- **Tests**: several identical polls keep one raw chain, named by each; a
+  changed chain, the first again, and a chain whose record is gone are
+  kept anew; a standing chain read six times keeps one raw record for each
+  expiration, and every series and quote names a record in storage.
+
 ## 0.15.1
 
 On open-meridian 0.36.3, contract 30, on core aae501d's harness (chart

@@ -84,6 +84,50 @@ def test_a_429_is_waited_out_and_counted(tmp_path: Path) -> None:
     assert tradier.usage.rate_limited == 1 and tradier.usage.calls == 2
 
 
+def test_an_unchanged_chain_is_kept_once_and_named_again(tmp_path: Path) -> None:
+    """Several identical polls of one expiration's chain keep one raw record
+    (0.15.2): each names the one kept, which holds exactly what it said. A
+    chain that changed is kept anew, and so is one whose last record is gone."""
+    same = '{"options":{"option":{"symbol":"SPY261016C00575000","bid":4.1,"ask":4.15}}}'
+    moved = '{"options":{"option":{"symbol":"SPY261016C00575000","bid":4.11,"ask":4.15}}}'
+    now = [at("2026-10-10", 9)]
+    store = RawStore(tmp_path)
+    tradier = Tradier(
+        store,
+        TOKEN,
+        transport=Scripted(*[(200, same, {"x-ratelimit-used": str(n)}) for n in range(3)],
+                           (429, "Rate limit exceeded", {"retry-after": "1"}),
+                           (200, same, {}), (200, moved, {}), (200, same, {}), (200, same, {})),
+        limiter=no_wait(),
+        clock_ns=lambda: now[0],
+        sleep=lambda _: None,
+    )  # fmt: skip
+
+    def poll() -> str:
+        now[0] += 60 * 10**9
+        return tradier.chain("SPY", "2026-10-16").raw_key
+
+    def kept() -> list[Path]:
+        return sorted((tmp_path / "chains" / "SPY" / "2026-10-16").glob("*.json"))
+
+    first = [poll() for _ in range(3)]
+    assert len(set(first)) == 1 and len(kept()) == 1
+    record = store.get(first[0])
+    assert record is not None and record["body"] == same
+    # A 429 is kept, as every answer is; the chain after it still unchanged.
+    assert poll() == first[0] and len(kept()) == 2
+    # Changed: kept anew. The first chain again: kept anew, never named back.
+    changed, back = poll(), poll()
+    assert len({first[0], changed, back}) == 3 and len(kept()) == 4
+    assert store.get(changed)["body"] == moved  # type: ignore[index]
+    # The record a row would name gone: the chain is kept again.
+    store._path(back).unlink()
+    again = poll()
+    assert again != back and store.get(again)["body"] == same  # type: ignore[index]
+    # Every key named was written.
+    assert all(store.get(key) is not None for key in (*first, changed, again))
+
+
 def test_the_limiter_spends_at_most_half_tradiers_allowance() -> None:
     slept: list[float] = []
     now = [0.0]
