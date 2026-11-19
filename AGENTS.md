@@ -20,7 +20,9 @@ as for every plugin.
   `sample_data`, a developer's) and the storage. A dataset's key, modes, day and default terms change only with a
   new version, and the deployment admin sees them before approving it.
 - `src/tradier/vendor.py`: the only module that speaks to Tradier. Every
-  response is kept as a raw record first (`raw.py`); the token goes in one
+  response is kept as a raw record first (`raw.py`), a chain only where it
+  changed since the last kept for its expiration, which an unchanged one's
+  rows name (0.15.2); the token goes in one
   header and nowhere else; at most 60 calls a minute. Tradier spells a
   share class with a slash (`BRK/B`), sends a list of one as the object and
   none as `null`, and states quote sizes in hundreds.

@@ -22,9 +22,10 @@ It is the second half of the retail pair, beside
 [meridian-alpaca](https://github.com/open-meridian/plugin-alpaca): both
 pass the same suites of the SDK, unchanged.
 
-**Status:** 0.15.1, on open-meridian 0.36.3 (contract 30: each dataset's
+**Status:** 0.15.2, on open-meridian 0.36.3 (contract 30: each dataset's
 terms and pricing in words, and how a gap in it is recovered; a row key's
-valid time fixed, below): one class for
+valid time fixed, below; an option chain's raw record kept only when the
+chain changed): one class for
 each role it holds -- the data role's `Market` (the SDK's listings feed
 and its option chains), custody's `Custodian`, connectivity's `Trading`
 (the SDK's `Trader`) -- registered with `meridian.run`, and its stream kept
@@ -77,6 +78,18 @@ SDK, CLI 0.1.52 and core v28 (8def82a), by tag and digest.
 - Every response, and every stream event, is kept first as a raw record in
   the storage the deployment grants the plugin, without the token or a
   session's ID; every row names the one it came from.
+- An option chain's answer is kept only when it changed: a standing want
+  reads each expiration as often as once a minute, day and night, and an
+  answer whose body is the same as the last one kept for that underlying
+  and expiration (compared by a SHA-256 digest of the URL and the body) is
+  not kept again. Its rows name that last record, which holds exactly the
+  values they were read from. Nothing in Tradier's chain is left out of the
+  comparison: the body states no time of its asking (its times are each
+  series' own, and a quote's time is read from them); when it was received
+  and Tradier's rate-limit headers are kept beside the body, outside it. A
+  refusal or a rate limit is kept every time; after a restart, or where the
+  last record is no longer in storage, the next answer is kept. The rows
+  the lake receives are unchanged.
 - Each row under its own record's key: where the deployment holds two
   records of one listing (one Tradier's, one a custodian's, not yet merged),
   each record's rows are its own, the key naming the record
