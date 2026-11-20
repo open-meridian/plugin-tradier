@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.15.3
+
+SDK 0.37.0: waits for a lost sidecar; its storage is read once registered,
+on an instance run as shards or with a standby pod the shard's own folder,
+and the Trader reads what it sent, enabled and watched from it on start.
+
 ## 0.15.2
 
 On open-meridian 0.36.3, contract 30, as 0.15.1. What the lake receives is

@@ -54,17 +54,17 @@ import meridian
 from meridian import edge
 from meridian.errors import NotRegistered
 from meridian.roles import Latency
-from meridian.roles.connectivity import Sent, Trader, Watched, trading_files
+from meridian.roles.connectivity import Trader
+from meridian.roles.data import option_chains
 
 from .broker import Broker
 from .convert import spelled
 from .custody import MARKET_ZONE, Syncer
 from .declaration import DECLARATION, PORT
 from .kinds import Store, tend, windows_from
-from .kinds import root as kinds_root
 from .lake import Lake, Products
 from .page import State, figures, pages, use
-from .raw import RawStore, storage_root
+from .raw import RawStore
 from .settings import SANDBOX_SAID, Config, config_from
 from .source import TradierSource
 from .stream import Feed, FeedError, Refused, Streamer, TradierFeed
@@ -193,9 +193,12 @@ class Process:
     the first of custody and connectivity started."""
 
     def __init__(self) -> None:
-        self.granted = edge.storage_dir()
-        self.store = RawStore(storage_root(Path(tempfile.mkdtemp(prefix="tradier-raw-"))))
-        self.kinds = Store(kinds_root())
+        # Its storage is read once registered (`open_storage`): until then
+        # the raw records and the kinds have directories of their own.
+        self.granted: Path | None = None
+        self.opened = False
+        self.store = RawStore(Path(tempfile.mkdtemp(prefix="tradier-raw-")))
+        self.kinds = Store(Path(tempfile.mkdtemp(prefix="tradier-kinds-")))
         # The sessions' latency (contract v27), shown on Connection's
         # Sessions; and from 0.13.0 (contract v28, rulings 515 and 518) each
         # live row's age at the edge too, all reported every 10 seconds
@@ -221,6 +224,7 @@ class Process:
         the Tradier client made again with the token for the environment
         chosen (or, with sample data, the built-in exchange), the account's
         client too, what is streamed asked again, and the kinds tended."""
+        self.open_storage()
         state, market = self.state, self.state.lake
         state.config = config_from(delivered.values, delivered.missing)
         state.values = dict(delivered.values)
@@ -261,10 +265,40 @@ class Process:
         except (meridian.MeridianError, ValueError) as failed:
             log.warning("health not reported: %s", failed)
 
+    def open_storage(self) -> None:
+        """Its storage, read once registered -- on an instance run as shards
+        or with a standby pod, the shard's own folder (open-meridian 0.37.0)
+        -- at the first settings, which `meridian.run` delivers before any
+        class starts, and read afresh when registered again: the raw
+        records, the kinds, the simulated brokerage's orders, the listing
+        map and each option series' first valid time. Where none is
+        granted, they stay in directories of their own."""
+        if self.opened:
+            return
+        self.opened = True
+        granted = edge.storage_dir()
+        self.granted = granted
+        if granted is not None:
+            self.store.root = granted / "raw"
+            self.kinds.base = granted
+        self.account.granted = granted
+        market = self.state.lake
+        if market is not None:
+            market.products = Products(granted / "products.json" if granted else None)
+            market.chains.series_times = option_chains.SeriesTimes(
+                granted / "series.json" if granted else None
+            )
+
+    def stopped(self) -> None:
+        """A class stopped, its sidecar lost or the plugin stopping: its
+        storage is read afresh when registered again."""
+        self.opened = False
+
     def started(self, role: Any) -> None:
         """A class started: the first reports the latency and says the
         health; the first of custody and connectivity follows the account
         scope and tends the kinds."""
+        self.open_storage()
         if self.latency.role is None:
             self.latency.role = role
         if self.first is None:
@@ -346,17 +380,18 @@ class Market(Lake):
     its licences read in `run`."""
 
     def __init__(self, process: Process) -> None:
-        granted = process.granted
-        super().__init__(
-            None,
-            Products(granted / "products.json" if granted else None),
-            series_path=granted / "series.json" if granted else None,
-        )
+        # The listing map and the series' first valid times are read once registered
+        # (`Process.open_storage`).
+        super().__init__(None, Products(None))
         self.process = process
         self.latency = process.latency
 
     async def on_start(self) -> None:
         self.process.started(self)
+
+    async def on_stop(self) -> None:
+        self.process.stopped()
+        await super().on_stop()
 
     async def run(self) -> None:
         assert self.streamer is not None
@@ -402,6 +437,10 @@ class Custodian(Syncer):
         self.process.state.syncer = self
         self.process.started(self)
 
+    async def on_stop(self) -> None:
+        self.process.stopped()
+        await super().on_stop()
+
     async def run(self) -> None:
         await asyncio.gather(self._reads(), self.process.shared(self))
 
@@ -424,15 +463,13 @@ class Trading(Trader):
 
     def __init__(self, process: Process) -> None:
         state, account = process.state, process.account
-        sent, enabled, originated = trading_files(process.granted)
+        # What it sent, enabled and watched it reads from its storage on
+        # start, once registered: a shard's own folder is known only then.
         super().__init__(
             lambda: account.venue,
             now=lambda: datetime.now(UTC),
-            sent=Sent(sent),
-            enabled=Sent(enabled),
             # The venue account codes its ems mapped on it (W11.22).
             scope=lambda: state.scope,
-            watched=Watched(originated),
             market_zone=MARKET_ZONE,
             # Each call to the brokerage API its round trip, a placement its
             # acknowledgement, a fill its delay (contract v27).
@@ -447,6 +484,10 @@ class Trading(Trader):
         self.process.state.trader = self
         self.process.started(self)
         await super().on_start()
+
+    async def on_stop(self) -> None:
+        self.process.stopped()
+        await super().on_stop()
 
     async def run(self) -> None:
         await asyncio.gather(super().run(), self.process.shared(self))
